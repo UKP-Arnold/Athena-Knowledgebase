@@ -9,12 +9,17 @@ import java.util.TimeZone;
 
 import javax.annotation.PostConstruct;
 import javax.persistence.EntityManager;
+import javax.servlet.http.HttpServletRequest;
 
+import de.tudarmstadt.informatik.ukp.athena.knowledgebase.PDFParser.Parser;
+import de.tudarmstadt.informatik.ukp.athena.knowledgebase.api.APIController;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
+import org.json.JSONException;
 import org.springframework.boot.SpringApplication;
 import org.springframework.boot.autoconfigure.SpringBootApplication;
 
+import de.tudarmstadt.informatik.ukp.athena.knowledgebase.api.APIController;
 import de.tudarmstadt.informatik.ukp.athena.knowledgebase.crawler.CrawlerFacade;
 import de.tudarmstadt.informatik.ukp.athena.knowledgebase.crawler.SupportedConferences;
 import de.tudarmstadt.informatik.ukp.athena.knowledgebase.crawler.semanticscholarapi.S2APIFunctions;
@@ -31,6 +36,7 @@ import de.tudarmstadt.informatik.ukp.athena.knowledgebase.database.models.Paper;
 import de.tudarmstadt.informatik.ukp.athena.knowledgebase.database.models.Person;
 import de.tudarmstadt.informatik.ukp.athena.knowledgebase.database.models.ScheduleEntry;
 import de.tudarmstadt.informatik.ukp.athena.knowledgebase.database.models.Workshop;
+
 
 @SpringBootApplication
 /**
@@ -69,6 +75,7 @@ public class ParsedDataInserter {
 
 	//length of 40 lines exceeded because this is all one startup sequence which manages everything
 	public static void main(String[] args) {
+
 		long then = System.nanoTime();
 		SpringApplication.run(ParsedDataInserter.class, args);
 		ParsedDataInserter parsedDataInserter;
@@ -77,11 +84,11 @@ public class ParsedDataInserter {
 		String[] conferences = null;
 
 		for(String arg : args) {
-			if(arg.startsWith("-beginYear="))
+			if(arg.contains("-beginYear="))
 				beginYear = Integer.parseInt(arg.split("=")[1]); //parse to make sure that it's a number
-			else if(arg.startsWith("-endYear="))
+			if(arg.contains("-endYear="))
 				endYear = Integer.parseInt(arg.split("=")[1]); //parse to make sure that it's a number
-			else if(arg.startsWith("-conferences="))
+			else if(arg.contains("-conferences="))
 				conferences = arg.replace("-conferences=", "").split(",");
 
 		}
@@ -117,8 +124,26 @@ public class ParsedDataInserter {
 			parsedDataInserter.acl2018StoreConferenceInformation(); //automatically saves the schedule as well
 		else
 			logger.info("\"-scrape-acl18-info\" argument was not found, skipping ACL 2018 scraping");
-
+		Parser parse = new Parser();
+		if(argsList.contains("-parse-institutions"))
+			parse.parseInstitution();
 		logger.info("Done! (Took {})", LocalTime.ofNanoOfDay(System.nanoTime() - then));
+
+		// test API
+//		APIController apic = new APIController();		
+//		String request = "/paper:title=Emoji+Prediction"; // paper:title=wrror+rate+estimation"; //tako+kudo/paper:paperID=1/person";// 
+//		// Multimodal+Frame+Identification+with+Multilingual+Evaluation 
+//		apic.apiConnector(request);
+
+
+//		// testing my code
+//		PersonJPAAccess personfiler = new PersonJPAAccess();
+//		Person testperson = new Person();
+//		testperson.setFullName("irina gure");
+////		List<Person> result = personfiler.getByKnownAttributes(testperson);
+//		Person result = personfiler.getByFullName(testperson.getFullName());
+//		System.out.println(result);
+		
 		parsedDataInserter.acl18WebParser.close();
 	}
 
@@ -137,6 +162,7 @@ public class ParsedDataInserter {
 		logger.info("Inserting papers and authors into database...");
 
 		for(Paper paper : papers) {
+            System.out.println("Paper added: " + paper.getTitle());
 			paperFiler.add(paper);
 		}
 
@@ -222,7 +248,7 @@ public class ParsedDataInserter {
 			//1. Update information about the author
 			entityManager.getTransaction().begin();
 			try { S2APIFunctions.completeAuthorInformationByAuthorSearch(currPerson, false); }
-			catch (IOException e) {
+			catch (IOException | JSONException e) {
 				failedAuthors++;
 				e.printStackTrace();
 			}
